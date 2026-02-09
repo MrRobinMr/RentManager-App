@@ -4,6 +4,8 @@ import os
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QComboBox, QVBoxLayout, QHBoxLayout,
                              QWidget, QPushButton, QTextEdit, QLabel, QDialog, QFormLayout,
                              QDateEdit, QLineEdit, QListWidget, QFileDialog)
+from PyQt6.QtGui import QPageLayout, QPageSize
+from PyQt6.QtCore import QMarginsF
 from PyQt6.QtCore import QDate
 from PyQt6.QtWebEngineWidgets import QWebEngineView
 
@@ -188,9 +190,16 @@ class InvoiceApp(QMainWindow):
             self.update_preview()
 
     def save_pdf(self):
-        path, _ = QFileDialog.getSaveFileName(self, "Zapisz PDF", f"Faktura_{self.combo.currentText()}.pdf", "PDF (*.pdf)")
-        if path: self.browser.page().printToPdf(path)
-
+        path, _ = QFileDialog.getSaveFileName(self, "Zapisz PDF", f"Faktura_{self.combo.currentText()}.pdf",
+                                              "PDF (*.pdf)")
+        if path:
+            # Ustawiamy A4, Pionowo i wymuszamy 0 marginesów systemowych
+            layout = QPageLayout(
+                QPageSize(QPageSize.PageSizeId.A4),
+                QPageLayout.Orientation.Portrait,
+                QMarginsF(0, 0, 0, 0)  # System nie dodaje nic, ufamy marginesom w CSS
+            )
+            self.browser.page().printToPdf(path, layout)
     def get_html_part(self, name, d, typ, qdate):
         s_h = self.ustawienia['sprzedawca_staly'].replace('\n', '<br>')
         b_h = self.ustawienia['bank_nr_konta'].replace('\n', '<br>')
@@ -252,7 +261,95 @@ class InvoiceApp(QMainWindow):
         });
         </script>
         """
-        css = "<style>@page{size:A4;margin:0;}body{font-family:serif;padding:10mm;background:#eee;}.paper{background:white;width:210mm;margin:auto;padding:15mm;}.invoice-part{border-bottom:1px dashed #000;padding-bottom:20px;margin-bottom:20px;}.header{display:flex;justify-content:space-between;font-size:12px;}.items{width:100%;border-collapse:collapse;margin:15px 0;font-size:11px;}.items th,.items td{border:1px solid #000;padding:4px;text-align:center;}.summary{text-align:right;font-size:12px;}.legal{font-size:9px;margin:10px 0;}.footer{display:flex;justify-content:space-between;margin-top:20px;}.sig{width:180px;text-align:center;border-top:1px solid #000;font-size:10px;}[contenteditable='true']:focus{background:#fffde7;}</style>"
+        css = """
+                <style>
+                @media print {
+                    body { background: white; }
+                    * { -webkit-print-color-adjust: exact; }
+                    @page { margin: 0; } /* Ważne: usuwa nagłówki/stopki przeglądarki */
+                }
+
+                body {
+                    background-color: #ffffff;
+                    margin: 0;
+                    padding: 0;
+                    display: flex;
+                    justify-content: center;
+                }
+
+                .paper {
+                    width: 210mm;
+                    height: 230mm;
+                    padding: 10mm 15mm; /* Mniejszy margines góra/dół (10mm) */
+                    box-sizing: border-box;
+                    background: white;
+                    display: flex;
+                    flex-direction: column;
+                    overflow: hidden; /* Blokuje wyciekanie treści na 2 stronę */
+                }
+
+                .invoice-part {
+                    height: 47%; /* Sztywne ograniczenie wysokości każdej części */
+                    display: flex;
+                    flex-direction: column;
+                    justify-content: flex-start;
+                }
+
+                #section_oryginal {
+                    border-bottom: 1px dashed #aaa;
+                    margin-bottom: 5mm; /* Zredukowany odstęp */
+                    padding-bottom: 5mm;
+                }
+
+                .header {
+                    display: flex;
+                    justify-content: space-between;
+                    font-size: 10px; /* Mniejsza czcionka nagłówka */
+                    margin-bottom: 10px;
+                }
+
+                .label { font-weight: bold; text-decoration: underline; }
+
+                .items {
+                    width: 100%;
+                    border-collapse: collapse;
+                    margin-bottom: 5px;
+                    font-size: 10px;
+                }
+                .items th, .items td {
+                    border: 1px solid black;
+                    padding: 3px; /* Ciasne komórki */
+                    text-align: center;
+                }
+                .items th { background: #f2f2f2 !important; }
+
+                .summary { text-align: right; font-size: 10px; font-weight: bold; margin-top: 5px; }
+
+                .legal { 
+                    font-size: 8px; 
+                    margin: 5px 0; 
+                    text-align: justify; 
+                    line-height: 1.1;
+                }
+
+                .footer {
+                    display: flex;
+                    justify-content: space-between;
+                    margin-top: auto; /* Popycha podpisy do dołu ich sekcji */
+                    padding-bottom: 5px;
+                }
+
+                .sig {
+                    width: 150px;
+                    text-align: center;
+                    border-top: 1px solid black;
+                    font-size: 9px;
+                    padding-top: 3px;
+                }
+
+                [contenteditable='true']:focus { background: #fffde7; outline: none; }
+                </style>
+                """
         h = f"<html><head>{css}{js}</head><body><div class='paper'>" + self.get_html_part(name, d, "oryginał", qd) + self.get_html_part(name, d, "kopia", qd) + "</div></body></html>"
         self.browser.setHtml(h)
 
