@@ -335,8 +335,9 @@ class InvoiceApp(QMainWindow):
                 .footer {
                     display: flex;
                     justify-content: space-between;
-                    margin-top: auto; /* Popycha podpisy do dołu ich sekcji */
+                    margin-top: auto;
                     padding-bottom: 5px;
+                    font-size: 10px;
                 }
 
                 .sig {
